@@ -168,8 +168,9 @@ mapImage.onload = () => {
     WORLD_H = mapImage.height / scale;
   }
   
+  // Обновленные координаты магазина (под дом 100)
   shop.x = 81 * (WORLD_W / 960);
-  shop.y = 232 * (WORLD_H / 640);
+  shop.y = 265 * (WORLD_H / 640);
   player.x = WORLD_W - 120;
   player.y = WORLD_H - 80;
   
@@ -197,18 +198,18 @@ const player = {
 };
 
 // ============================================================
-//  МАГАЗИН
+//  МАГАЗИН (Спущен ниже, сужен и вытянут)
 // ============================================================
 const shop = {
   x: 81 * (WORLD_W / 960),
-  y: 232 * (WORLD_H / 640),
-  w: 60,
-  h: 50,
+  y: 265 * (WORLD_H / 640),  // Опущен вниз
+  w: 45,                     // Сужен
+  h: 75,                     // Вытянут
   color: '#ffd600'
 };
 
 // ============================================================
-//  ПРЕПЯТСТВИЯ (Увеличенная скорость машин)
+//  ПРЕПЯТСТВИЯ
 // ============================================================
 const obstacles = [
   // 1. Синяя (по Ленина, слева направо)
@@ -247,7 +248,7 @@ const obstacles = [
   // Собаки
   { type: 'dog', x: 500 * (WORLD_W / 960), y: 450 * (WORLD_H / 640), w: 40, h: 40, color: '#795548', vx: 1.2,  vy: 0    },
   { type: 'dog', x: 700 * (WORLD_W / 960), y: 250 * (WORLD_H / 640), w: 40, h: 40, color: '#8d6e63', vx: -1.0, vy: 0.8  },
-  // Птицы
+  // Птицы (увеличенные)
   { type: 'bird', x: 700 * (WORLD_W / 960), y: 200 * (WORLD_H / 640), w: 40, h: 40, color: '#e91e63', vx: -2.0, vy: 1.0  },
   { type: 'bird', x: 450 * (WORLD_W / 960), y: 500 * (WORLD_H / 640), w: 40, h: 40, color: '#9c27b0', vx: 1.8,  vy: -1.2 },
   { type: 'bird', x: 900 * (WORLD_W / 960), y: 400 * (WORLD_H / 640), w: 40, h: 40, color: '#3f51b5', vx: 1.5,  vy: 1.5  }
@@ -303,12 +304,16 @@ function getCanvasCoords(e) {
 function handlePointerDown(e) {
   initAudio();
   const pos = getCanvasCoords(e);
-  if (pos.x < W / 2) {
-    joystick.active = true; joystick.startX = pos.x; joystick.startY = pos.y;
-    joystick.curX = pos.x; joystick.curY = pos.y;
-    joystick.id = (e.touches && e.touches.length > 0) ? e.touches[0].identifier : 'mouse';
-    e.preventDefault();
-  }
+  
+  // Джойстик появляется в любой точке
+  joystick.active = true; 
+  joystick.startX = pos.x; 
+  joystick.startY = pos.y;
+  joystick.curX = pos.x; 
+  joystick.curY = pos.y;
+  joystick.id = (e.touches && e.touches.length > 0) ? e.touches[0].identifier : 'mouse';
+  
+  e.preventDefault();
 }
 
 function handlePointerMove(e) {
@@ -496,19 +501,53 @@ function draw() {
     ctx.font = '24px sans-serif'; ctx.fillText('Нажмите R или 🔄 чтобы сыграть ещё', W / 2, H / 2 + 30);
   }
 
+  // Отрисовка джойстика
   if (joystick.active) {
     ctx.save();
-    ctx.beginPath(); ctx.arc(joystick.startX, joystick.startY, 40, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; ctx.lineWidth = 2; ctx.stroke();
+    
+    // Тень под джойстиком
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 5;
 
-    const jdx = joystick.curX - joystick.startX, jdy = joystick.curY - joystick.startY;
-    const dist = Math.hypot(jdx, jdy), maxDist = 40;
+    // База джойстика
+    ctx.beginPath();
+    ctx.arc(joystick.startX, joystick.startY, 50, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.shadowColor = 'transparent';
+
+    // Внутренний стик
+    const jdx = joystick.curX - joystick.startX;
+    const jdy = joystick.curY - joystick.startY;
+    const dist = Math.hypot(jdx, jdy);
+    const maxDist = 50;
     const stickX = joystick.startX + (dist > maxDist ? (jdx / dist) * maxDist : jdx);
     const stickY = joystick.startY + (dist > maxDist ? (jdy / dist) * maxDist : jdy);
 
-    ctx.beginPath(); ctx.arc(stickX, stickY, 20, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'; ctx.fill();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+    ctx.shadowBlur = 5;
+    ctx.shadowOffsetY = 3;
+
+    ctx.beginPath();
+    ctx.arc(stickX, stickY, 25, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Блик на стике
+    ctx.shadowColor = 'transparent';
+    ctx.beginPath();
+    ctx.arc(stickX - 5, stickY - 5, 8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.fill();
+
     ctx.restore();
   }
 }

@@ -51,7 +51,7 @@
 //  НАСТРОЙКИ ЭКРАНА И АДАПТИВНОСТЬ
 // ============================================================
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d', { alpha: false }); // Отключаем прозрачность для скорости
+const ctx = canvas.getContext('2d', { alpha: false });
 
 let W = window.innerWidth;
 let H = window.innerHeight;
@@ -60,7 +60,6 @@ function resize() {
   W = window.innerWidth;
   H = window.innerHeight;
   
-  // ОГРАНИЧИВАЕМ DPR до 1.5 (главный фикс тормозов на телефонах)
   let dpr = window.devicePixelRatio || 1;
   if (dpr > 1.5) dpr = 1.5; 
   
@@ -70,14 +69,10 @@ function resize() {
   canvas.style.width = W + 'px';
   canvas.style.height = H + 'px';
   
-  // Сбрасываем трансформацию и масштабируем заново
   ctx.setTransform(1, 0, 0, 1, 0, 0); 
   ctx.scale(dpr, dpr);
-  
-  // Отключаем сглаживание для производительности (можно включить обратно, если графика слишком пиксельная)
   ctx.imageSmoothingEnabled = false;
 
-  // Подгоняем камеру под новое соотношение сторон
   if (typeof camera !== 'undefined' && typeof player !== 'undefined') {
     let targetCamX = player.x + player.size / 2 - W / 2;
     let targetCamY = player.y + player.size / 2 - H / 2;
@@ -172,7 +167,6 @@ mapImage.onload = () => {
     const scale = mapImage.width / WORLD_W;
     WORLD_H = mapImage.height / scale;
   }
-  console.log(`Мир: ${WORLD_W.toFixed(0)}×${WORLD_H.toFixed(0)}`);
   
   shop.x = 81 * (WORLD_W / 960);
   shop.y = 232 * (WORLD_H / 640);
@@ -214,37 +208,49 @@ const shop = {
 };
 
 // ============================================================
-//  ПРЕПЯТСТВИЯ
+//  ПРЕПЯТСТВИЯ (Увеличенная скорость машин)
 // ============================================================
 const obstacles = [
-  // Машины
+  // 1. Синяя (по Ленина, слева направо)
   {
-    type: 'car', color: '#1976d2', w: 90, h: 40, speed: 2.2,
+    type: 'car', color: '#1976d2', w: 90, h: 40, 
+    speed: 4.5, 
     path: [ { x: -100, y: 560 * (WORLD_H / 640) }, { x: WORLD_W + 100, y: 560 * (WORLD_H / 640) } ],
     pathIndex: 1, x: -100, y: 560 * (WORLD_H / 640), vx: 1, vy: 0
   },
+  // 2. Зелёная (по Ленина, справа налево)
   {
-    type: 'car', color: '#43a047', w: 90, h: 40, speed: 1.8,
+    type: 'car', color: '#43a047', w: 90, h: 40, 
+    speed: 3.8, 
     path: [ { x: WORLD_W + 100, y: 580 * (WORLD_H / 640) }, { x: -100, y: 580 * (WORLD_H / 640) } ],
     pathIndex: 1, x: WORLD_W + 100, y: 580 * (WORLD_H / 640), vx: -1, vy: 0
   },
+  // 3. Оранжевая (по Красноармейской, сверху вниз)
   {
-    type: 'car', color: '#f57c00', w: 40, h: 90, speed: 2.0,
+    type: 'car', color: '#f57c00', w: 40, h: 90, 
+    speed: 5.0, 
     path: [ { x: 1080 * (WORLD_W / 960), y: -100 }, { x: 1080 * (WORLD_W / 960), y: WORLD_H + 100 } ],
     pathIndex: 1, x: 1080 * (WORLD_W / 960), y: -100, vx: 0, vy: 1
   },
+  // 4. Красная (по Луначарского)
   {
-    type: 'car', color: '#c62828', w: 90, h: 40, speed: 1.6,
-    path: [ { x: -100, y: 360 * (WORLD_H / 640) }, { x: 800 * (WORLD_W / 960), y: 360 * (WORLD_H / 640) }, { x: 800 * (WORLD_W / 960), y: 320 * (WORLD_H / 640) }, { x: WORLD_W + 100, y: 320 * (WORLD_H / 640) } ],
+    type: 'car', color: '#c62828', w: 90, h: 40, 
+    speed: 3.5, 
+    path: [ 
+      { x: -100, y: 360 * (WORLD_H / 640) }, 
+      { x: 800 * (WORLD_W / 960), y: 360 * (WORLD_H / 640) }, 
+      { x: 800 * (WORLD_W / 960), y: 320 * (WORLD_H / 640) }, 
+      { x: WORLD_W + 100, y: 320 * (WORLD_H / 640) } 
+    ],
     pathIndex: 1, x: -100, y: 360 * (WORLD_H / 640), vx: 1, vy: 0
   },
   // Собаки
   { type: 'dog', x: 500 * (WORLD_W / 960), y: 450 * (WORLD_H / 640), w: 40, h: 40, color: '#795548', vx: 1.2,  vy: 0    },
   { type: 'dog', x: 700 * (WORLD_W / 960), y: 250 * (WORLD_H / 640), w: 40, h: 40, color: '#8d6e63', vx: -1.0, vy: 0.8  },
   // Птицы
-  { type: 'bird', x: 700 * (WORLD_W / 960), y: 200 * (WORLD_H / 640), w: 30, h: 30, color: '#e91e63', vx: -2.0, vy: 1.0  },
-  { type: 'bird', x: 450 * (WORLD_W / 960), y: 500 * (WORLD_H / 640), w: 30, h: 30, color: '#9c27b0', vx: 1.8,  vy: -1.2 },
-  { type: 'bird', x: 900 * (WORLD_W / 960), y: 400 * (WORLD_H / 640), w: 30, h: 30, color: '#3f51b5', vx: 1.5,  vy: 1.5  }
+  { type: 'bird', x: 700 * (WORLD_W / 960), y: 200 * (WORLD_H / 640), w: 40, h: 40, color: '#e91e63', vx: -2.0, vy: 1.0  },
+  { type: 'bird', x: 450 * (WORLD_W / 960), y: 500 * (WORLD_H / 640), w: 40, h: 40, color: '#9c27b0', vx: 1.8,  vy: -1.2 },
+  { type: 'bird', x: 900 * (WORLD_W / 960), y: 400 * (WORLD_H / 640), w: 40, h: 40, color: '#3f51b5', vx: 1.5,  vy: 1.5  }
 ];
 
 // ============================================================
@@ -563,22 +569,48 @@ function drawKid(x, y, size, facing = 1, animTime = 0, moving = false) {
 }
 
 function drawCar(o) {
-  const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+  const cx = o.x + o.w / 2;
+  const cy = o.y + o.h / 2;
+  
   let angle = 0;
-  if (Math.abs(o.vx) > Math.abs(o.vy)) angle = o.vx > 0 ? 0 : Math.PI;
-  else angle = o.vy > 0 ? Math.PI / 2 : -Math.PI / 2;
-  ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle);
-  const w = o.w, h = o.h;
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.roundRect(-w/2 + 3, -h/2 + 4, w, h, 8); ctx.fill();
-  ctx.fillStyle = o.color; ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, 8); ctx.fill();
+  if (Math.abs(o.vx) > Math.abs(o.vy)) {
+    angle = o.vx > 0 ? 0 : Math.PI;
+  } else {
+    angle = o.vy > 0 ? Math.PI / 2 : -Math.PI / 2;
+  }
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+
+  const w = Math.max(o.w, o.h);
+  const h = Math.min(o.w, o.h);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.roundRect(-w/2 + 3, -h/2 + 4, w, h, 8); ctx.fill();
+
+  ctx.fillStyle = o.color;
+  ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, 8); ctx.fill();
+
   ctx.fillStyle = 'rgba(180,220,255,0.85)';
   ctx.beginPath(); ctx.roundRect(w/2 - 22, -h/2 + 6, 16, h - 12, 4); ctx.fill();
   ctx.beginPath(); ctx.roundRect(-w/2 + 6, -h/2 + 6, 14, h - 12, 4); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.beginPath(); ctx.roundRect(-w/2 + 26, -h/2 + 8, w - 52, h - 16, 3); ctx.fill();
-  ctx.fillStyle = '#fff59d'; ctx.beginPath();
-  ctx.arc(w/2 - 4, -h/2 + 10, 3, 0, Math.PI * 2); ctx.arc(w/2 - 4, h/2 - 10, 3, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ef5350'; ctx.beginPath();
-  ctx.arc(-w/2 + 4, -h/2 + 10, 2.5, 0, Math.PI * 2); ctx.arc(-w/2 + 4, h/2 - 10, 2.5, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.beginPath(); ctx.roundRect(-w/2 + 26, -h/2 + 8, w - 52, h - 16, 3); ctx.fill();
+
+  ctx.fillStyle = '#fff59d';
+  ctx.beginPath();
+  ctx.arc(w/2 - 4, -h/2 + 10, 3, 0, Math.PI * 2);
+  ctx.arc(w/2 - 4,  h/2 - 10, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#ef5350';
+  ctx.beginPath();
+  ctx.arc(-w/2 + 4, -h/2 + 10, 2.5, 0, Math.PI * 2);
+  ctx.arc(-w/2 + 4,  h/2 - 10, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
   ctx.restore();
 }
 
@@ -603,24 +635,59 @@ function drawDog(o) {
 }
 
 function drawBird(o) {
-  const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+  const cx = o.x + o.w / 2;
+  const cy = o.y + o.h / 2;
   const dir = o.vx >= 0 ? 1 : -1;
-  const flap = Math.sin(Date.now() / 80) * 0.6;
-  ctx.save(); ctx.translate(cx, cy); ctx.scale(dir, 1);
-  const w = o.w, h = o.h;
-  ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(4, h/2 + 6, w/2 - 2, 3, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.save(); ctx.translate(-2, -2); ctx.rotate(-flap);
-  ctx.fillStyle = o.color; ctx.beginPath();
-  ctx.moveTo(0, 0); ctx.quadraticCurveTo(-w/2 - 4, -h/2 - 2, -w/2 - 2, 2); ctx.quadraticCurveTo(-w/2, h/3, 0, 0); ctx.fill(); ctx.restore();
-  ctx.save(); ctx.translate(-2, 2); ctx.rotate(flap);
-  ctx.fillStyle = o.color; ctx.beginPath();
-  ctx.moveTo(0, 0); ctx.quadraticCurveTo(-w/2 - 4, h/2 + 2, -w/2 - 2, -2); ctx.quadraticCurveTo(-w/2, -h/3, 0, 0); ctx.fill(); ctx.restore();
+  const flap = Math.sin(Date.now() / 100);
+  
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(dir, 1);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath(); ctx.ellipse(2, o.h/2 + 4, o.w/3, 3, 0, 0, Math.PI * 2); ctx.fill();
+
   ctx.fillStyle = o.color;
-  ctx.beginPath(); ctx.ellipse(0, 0, w/2 - 3, h/4, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(w/2 - 4, 0, 4, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ffb300'; ctx.beginPath();
-  ctx.moveTo(w/2, 0); ctx.lineTo(w/2 + 4, -1.5); ctx.lineTo(w/2 + 4, 1.5); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(w/2 - 3, -1, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-o.w/2 + 2, 0); ctx.lineTo(-o.w/2 - 6, -4);
+  ctx.lineTo(-o.w/2 - 4, 0); ctx.lineTo(-o.w/2 - 6, 4); ctx.closePath(); ctx.fill();
+
+  ctx.save();
+  ctx.translate(0, -2); ctx.rotate(flap * 0.4 - 0.2);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath(); ctx.ellipse(0, 0, o.w/2 + 2, 5, -0.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = o.color;
+  ctx.beginPath();
+  ctx.moveTo(o.w/2 - 2, -2);
+  ctx.quadraticCurveTo(o.w/4, -o.h/3, 0, -o.h/4);
+  ctx.quadraticCurveTo(-o.w/4, -o.h/4, -o.w/2 + 2, 0);
+  ctx.quadraticCurveTo(-o.w/4, o.h/3, 0, o.h/4);
+  ctx.quadraticCurveTo(o.w/4, o.h/3, o.w/2 - 2, -2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(0, 2); ctx.rotate(flap * 0.5);
+  ctx.fillStyle = o.color;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.quadraticCurveTo(-o.w/4, -o.h, -o.w/2 - 2, -o.h/2);
+  ctx.quadraticCurveTo(-o.w/3, 0, 0, 0);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-2, -2); ctx.lineTo(-o.w/2, -o.h/2); ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle = o.color;
+  ctx.beginPath(); ctx.arc(o.w/2 - 4, -2, 4, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#ffb300';
+  ctx.beginPath(); ctx.moveTo(o.w/2, -2); ctx.lineTo(o.w/2 - 2, -4); ctx.lineTo(o.w/2 - 2, 0); ctx.closePath(); ctx.fill();
+
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(o.w/2 - 4, -3, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(o.w/2 - 3.5, -3.2, 0.4, 0, Math.PI * 2); ctx.fill();
+
   ctx.restore();
 }
 
@@ -643,7 +710,7 @@ function drawCompassArrow(px, py, targetX, targetY) {
 }
 
 // ============================================================
-//  ЦИКЛ И СЧЕТЧИК FPS
+//  ЦИКЛ
 // ============================================================
 resize();
 
@@ -667,10 +734,9 @@ function loop() {
   update();
   draw();
   
-  // Отрисовка счетчика FPS (для отладки)
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(10, 10, 80, 30);
-  ctx.fillStyle = fps < 30 ? '#ff5252' : '#4caf50'; // Красный если < 30, зелёный если >= 30
+  ctx.fillStyle = fps < 30 ? '#ff5252' : '#4caf50';
   ctx.font = 'bold 16px monospace';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';

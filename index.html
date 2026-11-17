@@ -12,7 +12,7 @@
     height: 100%;
     background: #222;
     overflow: hidden;
-    touch-action: none; /* Отключаем скролл и зум страницы пальцем */
+    touch-action: none;
     font-family: sans-serif;
   }
   canvas {
@@ -20,7 +20,6 @@
     width: 100vw;
     height: 100vh;
   }
-  /* Кнопка рестарта для телефона */
   #mobile-restart {
     position: absolute;
     top: 20px;
@@ -39,7 +38,7 @@
     -webkit-user-select: none;
   }
   @media (pointer: coarse) {
-    #mobile-restart { display: block; } /* Показываем на сенсорных экранах */
+    #mobile-restart { display: block; }
   }
 </style>
 </head>
@@ -52,7 +51,7 @@
 //  НАСТРОЙКИ ЭКРАНА И АДАПТИВНОСТЬ
 // ============================================================
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.getContext('2d', { alpha: false }); // Отключаем прозрачность для скорости
 
 let W = window.innerWidth;
 let H = window.innerHeight;
@@ -61,20 +60,23 @@ function resize() {
   W = window.innerWidth;
   H = window.innerHeight;
   
-  // Учитываем плотность пикселей (Retina) для четкости на телефонах
-  const dpr = window.devicePixelRatio || 1;
+  // ОГРАНИЧИВАЕМ DPR до 1.5 (главный фикс тормозов на телефонах)
+  let dpr = window.devicePixelRatio || 1;
+  if (dpr > 1.5) dpr = 1.5; 
   
-  // Физический размер холста (для четкости)
   canvas.width = W * dpr;
   canvas.height = H * dpr;
   
-  // Визуальный размер на экране
   canvas.style.width = W + 'px';
   canvas.style.height = H + 'px';
   
-  // Масштабируем контекст, чтобы рисовать в обычных координатах
+  // Сбрасываем трансформацию и масштабируем заново
+  ctx.setTransform(1, 0, 0, 1, 0, 0); 
   ctx.scale(dpr, dpr);
   
+  // Отключаем сглаживание для производительности (можно включить обратно, если графика слишком пиксельная)
+  ctx.imageSmoothingEnabled = false;
+
   // Подгоняем камеру под новое соотношение сторон
   if (typeof camera !== 'undefined' && typeof player !== 'undefined') {
     let targetCamX = player.x + player.size / 2 - W / 2;
@@ -90,7 +92,6 @@ function resize() {
     camera.y = targetCamY;
   }
 }
-
 window.addEventListener('resize', resize);
 
 // ============================================================
@@ -99,11 +100,7 @@ window.addEventListener('resize', resize);
 let WORLD_W = 1920;
 let WORLD_H = 1280;
 
-const camera = {
-  x: 0,
-  y: 0,
-  lerp: 0.12 // Плавность камеры
-};
+const camera = { x: 0, y: 0, lerp: 0.12 };
 
 // ============================================================
 //  ЗВУКОВОЙ ДВИЖОК (Web Audio API)
@@ -182,7 +179,6 @@ mapImage.onload = () => {
   player.x = WORLD_W - 120;
   player.y = WORLD_H - 80;
   
-  // Центрируем камеру после загрузки карты
   let targetCamX = player.x + player.size / 2 - W / 2;
   let targetCamY = player.y + player.size / 2 - H / 2;
   targetCamX = (WORLD_W > W) ? Math.max(0, Math.min(WORLD_W - W, targetCamX)) : (WORLD_W - W) / 2;
@@ -223,46 +219,24 @@ const shop = {
 const obstacles = [
   // Машины
   {
-    type: 'car', color: '#1976d2', w: 90, h: 40,
-    speed: 2.2,
-    path: [ 
-      { x: -100, y: 560 * (WORLD_H / 640) }, 
-      { x: WORLD_W + 100, y: 560 * (WORLD_H / 640) } 
-    ],
-    pathIndex: 1,
-    x: -100, y: 560 * (WORLD_H / 640), vx: 1, vy: 0
+    type: 'car', color: '#1976d2', w: 90, h: 40, speed: 2.2,
+    path: [ { x: -100, y: 560 * (WORLD_H / 640) }, { x: WORLD_W + 100, y: 560 * (WORLD_H / 640) } ],
+    pathIndex: 1, x: -100, y: 560 * (WORLD_H / 640), vx: 1, vy: 0
   },
   {
-    type: 'car', color: '#43a047', w: 90, h: 40,
-    speed: 1.8,
-    path: [ 
-      { x: WORLD_W + 100, y: 580 * (WORLD_H / 640) }, 
-      { x: -100, y: 580 * (WORLD_H / 640) } 
-    ],
-    pathIndex: 1,
-    x: WORLD_W + 100, y: 580 * (WORLD_H / 640), vx: -1, vy: 0
+    type: 'car', color: '#43a047', w: 90, h: 40, speed: 1.8,
+    path: [ { x: WORLD_W + 100, y: 580 * (WORLD_H / 640) }, { x: -100, y: 580 * (WORLD_H / 640) } ],
+    pathIndex: 1, x: WORLD_W + 100, y: 580 * (WORLD_H / 640), vx: -1, vy: 0
   },
   {
-    type: 'car', color: '#f57c00', w: 40, h: 90,
-    speed: 2.0,
-    path: [ 
-      { x: 1080 * (WORLD_W / 960), y: -100 }, 
-      { x: 1080 * (WORLD_W / 960), y: WORLD_H + 100 } 
-    ],
-    pathIndex: 1,
-    x: 1080 * (WORLD_W / 960), y: -100, vx: 0, vy: 1
+    type: 'car', color: '#f57c00', w: 40, h: 90, speed: 2.0,
+    path: [ { x: 1080 * (WORLD_W / 960), y: -100 }, { x: 1080 * (WORLD_W / 960), y: WORLD_H + 100 } ],
+    pathIndex: 1, x: 1080 * (WORLD_W / 960), y: -100, vx: 0, vy: 1
   },
   {
-    type: 'car', color: '#c62828', w: 90, h: 40,
-    speed: 1.6,
-    path: [ 
-      { x: -100, y: 360 * (WORLD_H / 640) }, 
-      { x: 800 * (WORLD_W / 960), y: 360 * (WORLD_H / 640) }, 
-      { x: 800 * (WORLD_W / 960), y: 320 * (WORLD_H / 640) }, 
-      { x: WORLD_W + 100, y: 320 * (WORLD_H / 640) } 
-    ],
-    pathIndex: 1,
-    x: -100, y: 360 * (WORLD_H / 640), vx: 1, vy: 0
+    type: 'car', color: '#c62828', w: 90, h: 40, speed: 1.6,
+    path: [ { x: -100, y: 360 * (WORLD_H / 640) }, { x: 800 * (WORLD_W / 960), y: 360 * (WORLD_H / 640) }, { x: 800 * (WORLD_W / 960), y: 320 * (WORLD_H / 640) }, { x: WORLD_W + 100, y: 320 * (WORLD_H / 640) } ],
+    pathIndex: 1, x: -100, y: 360 * (WORLD_H / 640), vx: 1, vy: 0
   },
   // Собаки
   { type: 'dog', x: 500 * (WORLD_W / 960), y: 450 * (WORLD_H / 640), w: 40, h: 40, color: '#795548', vx: 1.2,  vy: 0    },
@@ -274,17 +248,11 @@ const obstacles = [
 ];
 
 // ============================================================
-//  УПРАВЛЕНИЕ (Клавиатура + Сенсор)
+//  УПРАВЛЕНИЕ
 // ============================================================
 const keys = {};
-let joystick = {
-  active: false,
-  startX: 0, startY: 0,
-  curX: 0, curY: 0,
-  id: null
-};
+let joystick = { active: false, startX: 0, startY: 0, curX: 0, curY: 0, id: null };
 
-// --- Клавиатура ---
 document.addEventListener('keydown', e => {
   initAudio();
   const k = e.key.toLowerCase();
@@ -299,14 +267,8 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyA') keys['left'] = true;
   if (e.code === 'KeyD') keys['right'] = true;
   
-  if (e.code === 'KeyR') {
-    playClick();
-    resetGame();
-  }
-
-  if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) {
-    e.preventDefault();
-  }
+  if (e.code === 'KeyR') { playClick(); resetGame(); }
+  if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
 });
 
 document.addEventListener('keyup', e => {
@@ -322,34 +284,22 @@ document.addEventListener('keyup', e => {
   if (e.code === 'KeyD') keys['right'] = false;
 });
 
-// --- Сенсорное управление ---
 function getCanvasCoords(e) {
   const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width / (window.devicePixelRatio || 1);
-  const scaleY = canvas.height / rect.height / (window.devicePixelRatio || 1);
+  const scaleX = canvas.width / rect.width / (window.devicePixelRatio > 1.5 ? 1.5 : (window.devicePixelRatio || 1));
+  const scaleY = canvas.height / rect.height / (window.devicePixelRatio > 1.5 ? 1.5 : (window.devicePixelRatio || 1));
   let clientX, clientY;
-  if (e.touches && e.touches.length > 0) {
-    clientX = e.touches[0].clientX;
-    clientY = e.touches[0].clientY;
-  } else {
-    clientX = e.clientX;
-    clientY = e.clientY;
-  }
-  return {
-    x: (clientX - rect.left) * scaleX,
-    y: (clientY - rect.top) * scaleY
-  };
+  if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+  else { clientX = e.clientX; clientY = e.clientY; }
+  return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
 }
 
 function handlePointerDown(e) {
   initAudio();
   const pos = getCanvasCoords(e);
   if (pos.x < W / 2) {
-    joystick.active = true;
-    joystick.startX = pos.x;
-    joystick.startY = pos.y;
-    joystick.curX = pos.x;
-    joystick.curY = pos.y;
+    joystick.active = true; joystick.startX = pos.x; joystick.startY = pos.y;
+    joystick.curX = pos.x; joystick.curY = pos.y;
     joystick.id = (e.touches && e.touches.length > 0) ? e.touches[0].identifier : 'mouse';
     e.preventDefault();
   }
@@ -361,8 +311,8 @@ function handlePointerMove(e) {
     for (let i = 0; i < e.touches.length; i++) {
       if (e.touches[i].identifier === joystick.id) {
         const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width / (window.devicePixelRatio || 1);
-        const scaleY = canvas.height / rect.height / (window.devicePixelRatio || 1);
+        const scaleX = canvas.width / rect.width / (window.devicePixelRatio > 1.5 ? 1.5 : (window.devicePixelRatio || 1));
+        const scaleY = canvas.height / rect.height / (window.devicePixelRatio > 1.5 ? 1.5 : (window.devicePixelRatio || 1));
         joystick.curX = (e.touches[i].clientX - rect.left) * scaleX;
         joystick.curY = (e.touches[i].clientY - rect.top) * scaleY;
         break;
@@ -370,8 +320,7 @@ function handlePointerMove(e) {
     }
   } else {
     const pos = getCanvasCoords(e);
-    joystick.curX = pos.x;
-    joystick.curY = pos.y;
+    joystick.curX = pos.x; joystick.curY = pos.y;
   }
   e.preventDefault();
 }
@@ -382,30 +331,20 @@ function handlePointerUp(e) {
     for (let i = 0; i < e.touches.length; i++) {
       if (e.touches[i].identifier === joystick.id) stillActive = true;
     }
-    if (!stillActive) {
-      joystick.active = false;
-      joystick.id = null;
-    }
-  } else {
-    joystick.active = false;
-    joystick.id = null;
-  }
+    if (!stillActive) { joystick.active = false; joystick.id = null; }
+  } else { joystick.active = false; joystick.id = null; }
 }
 
 canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
 canvas.addEventListener('touchmove', handlePointerMove, { passive: false });
 canvas.addEventListener('touchend', handlePointerUp);
 canvas.addEventListener('touchcancel', handlePointerUp);
-
-// Тест мышкой
 canvas.addEventListener('mousedown', handlePointerDown);
 window.addEventListener('mousemove', handlePointerMove);
 window.addEventListener('mouseup', handlePointerUp);
 
 document.getElementById('mobile-restart').addEventListener('click', () => {
-  initAudio();
-  playClick();
-  resetGame();
+  initAudio(); playClick(); resetGame();
 });
 
 // ============================================================
@@ -415,22 +354,16 @@ let gameOver = false;
 let win = false;
 
 function resetGame() {
-  player.x = WORLD_W - 120;
-  player.y = WORLD_H - 80;
-  player.facing = 1;
-  player.animTime = 0;
-  player.moving = false;
-  player.stepTimer = 0;
+  player.x = WORLD_W - 120; player.y = WORLD_H - 80;
+  player.facing = 1; player.animTime = 0; player.moving = false; player.stepTimer = 0;
   
   let targetCamX = player.x + player.size / 2 - W / 2;
   let targetCamY = player.y + player.size / 2 - H / 2;
   targetCamX = (WORLD_W > W) ? Math.max(0, Math.min(WORLD_W - W, targetCamX)) : (WORLD_W - W) / 2;
   targetCamY = (WORLD_H > H) ? Math.max(0, Math.min(WORLD_H - H, targetCamY)) : (WORLD_H - H) / 2;
-  camera.x = targetCamX;
-  camera.y = targetCamY;
+  camera.x = targetCamX; camera.y = targetCamY;
   
-  gameOver = false;
-  win = false;
+  gameOver = false; win = false;
 }
 
 // ============================================================
@@ -451,20 +384,14 @@ function update() {
     const jdy = joystick.curY - joystick.startY;
     const dist = Math.hypot(jdx, jdy);
     if (dist > 10) {
-      dx = jdx / dist;
-      dy = jdy / dist;
+      dx = jdx / dist; dy = jdy / dist;
       if (dx > 0.1) player.facing = 1;
       if (dx < -0.1) player.facing = -1;
     }
   }
 
   player.moving = (dx !== 0 || dy !== 0);
-
-  if (dx !== 0 && dy !== 0) {
-    const len = Math.hypot(dx, dy);
-    dx /= len;
-    dy /= len;
-  }
+  if (dx !== 0 && dy !== 0) { const len = Math.hypot(dx, dy); dx /= len; dy /= len; }
 
   player.x += dx * player.speed;
   player.y += dy * player.speed;
@@ -477,7 +404,6 @@ function update() {
     if (player.stepTimer >= 0.3) { player.stepTimer = 0; playStep(); }
   } else player.stepTimer = 0;
 
-  // Границы мира
   player.x = Math.max(0, Math.min(WORLD_W - player.size, player.x));
   player.y = Math.max(0, Math.min(WORLD_H - player.size, player.y));
 
@@ -485,50 +411,35 @@ function update() {
   const hx = player.x + (player.size - HB) / 2;
   const hy = player.y + (player.size - HB) / 2;
 
-  // Препятствия
   for (const o of obstacles) {
     if (o.type === 'car' && o.path) {
       const target = o.path[o.pathIndex];
-      const dxo = target.x - o.x;
-      const dyo = target.y - o.y;
+      const dxo = target.x - o.x, dyo = target.y - o.y;
       const dist = Math.hypot(dxo, dyo);
-      if (dist < 2) {
-        o.pathIndex = (o.pathIndex + 1) % o.path.length;
-      } else {
-        o.vx = (dxo / dist) * o.speed;
-        o.vy = (dyo / dist) * o.speed;
-        o.x += o.vx;
-        o.y += o.vy;
+      if (dist < 2) o.pathIndex = (o.pathIndex + 1) % o.path.length;
+      else {
+        o.vx = (dxo / dist) * o.speed; o.vy = (dyo / dist) * o.speed;
+        o.x += o.vx; o.y += o.vy;
       }
     } else {
-      o.x += o.vx;
-      o.y += o.vy;
+      o.x += o.vx; o.y += o.vy;
       if (o.x <= 0 || o.x + o.w >= WORLD_W) o.vx *= -1;
       if (o.y <= 0 || o.y + o.h >= WORLD_H) o.vy *= -1;
     }
 
-    if (hx < o.x + o.w && hx + HB > o.x &&
-        hy < o.y + o.h && hy + HB > o.y) {
+    if (hx < o.x + o.w && hx + HB > o.x && hy < o.y + o.h && hy + HB > o.y) {
       if (!gameOver) { gameOver = true; playHit(); }
     }
   }
 
-  // Победа
-  if (hx + HB > shop.x && hx < shop.x + shop.w &&
-      hy + HB > shop.y && hy < shop.y + shop.h) {
+  if (hx + HB > shop.x && hx < shop.x + shop.w && hy + HB > shop.y && hy < shop.y + shop.h) {
     if (!win) { win = true; playWin(); }
   }
 
-  // Камера
   let targetCamX = player.x + player.size / 2 - W / 2;
   let targetCamY = player.y + player.size / 2 - H / 2;
-
-  if (WORLD_W > W) targetCamX = Math.max(0, Math.min(WORLD_W - W, targetCamX));
-  else targetCamX = (WORLD_W - W) / 2;
-
-  if (WORLD_H > H) targetCamY = Math.max(0, Math.min(WORLD_H - H, targetCamY));
-  else targetCamY = (WORLD_H - H) / 2;
-
+  if (WORLD_W > W) targetCamX = Math.max(0, Math.min(WORLD_W - W, targetCamX)); else targetCamX = (WORLD_W - W) / 2;
+  if (WORLD_H > H) targetCamY = Math.max(0, Math.min(WORLD_H - H, targetCamY)); else targetCamY = (WORLD_H - H) / 2;
   camera.x += (targetCamX - camera.x) * camera.lerp;
   camera.y += (targetCamY - camera.y) * camera.lerp;
 }
@@ -538,172 +449,116 @@ function update() {
 // ============================================================
 function draw() {
   ctx.clearRect(0, 0, W, H);
-
   ctx.save();
-  ctx.translate(-camera.x, -camera.y);   // Сдвиг мира под камеру
+  ctx.translate(-camera.x, -camera.y);
 
-  // Фон
   if (mapReady) {
     ctx.drawImage(mapImage, 0, 0, WORLD_W, WORLD_H);
   } else {
-    ctx.fillStyle = '#8bc34a';
-    ctx.fillRect(0, 0, WORLD_W, WORLD_H);
-    ctx.fillStyle = '#333';
-    ctx.font = '20px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#8bc34a'; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    ctx.fillStyle = '#333'; ctx.font = '20px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('Положите map.png рядом с index.html', WORLD_W / 2, WORLD_H / 2);
   }
 
-  // Магазин
-  ctx.fillStyle = shop.color;
-  ctx.fillRect(shop.x, shop.y, shop.w, shop.h);
-  ctx.strokeStyle = '#333';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(shop.x, shop.y, shop.w, shop.h);
-  ctx.fillStyle = '#333';
-  ctx.font = 'bold 14px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  ctx.fillStyle = shop.color; ctx.fillRect(shop.x, shop.y, shop.w, shop.h);
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 3; ctx.strokeRect(shop.x, shop.y, shop.w, shop.h);
+  ctx.fillStyle = '#333'; ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('Играйка', shop.x + shop.w / 2, shop.y + shop.h / 2);
 
-  // Препятствия
   for (const o of obstacles) {
     if (o.type === 'car')  drawCar(o);
     if (o.type === 'dog')  drawDog(o);
     if (o.type === 'bird') drawBird(o);
   }
 
-  // Игрок
   drawKid(player.x, player.y, player.size, player.facing, player.animTime, player.moving);
 
-  // Стрелка-компас
-  if (!gameOver && !win) {
-    drawCompassArrow(player.x, player.y, shop.x, shop.y);
-  }
+  if (!gameOver && !win) drawCompassArrow(player.x, player.y, shop.x, shop.y);
 
-  ctx.restore();   // Конец мировых координат
+  ctx.restore();
 
-  // ---- UI поверх камеры ----
   if (gameOver) {
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 48px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 48px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('Ой! Попался 😅', W / 2, H / 2 - 30);
-    ctx.font = '24px sans-serif';
-    ctx.fillText('Нажмите R или 🔄 чтобы начать заново', W / 2, H / 2 + 30);
+    ctx.font = '24px sans-serif'; ctx.fillText('Нажмите R или 🔄 чтобы начать заново', W / 2, H / 2 + 30);
   }
   if (win) {
-    ctx.fillStyle = 'rgba(0,100,0,0.8)';
-    ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 48px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(0,100,0,0.8)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 48px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('🎉 Ты в «Играйке»!', W / 2, H / 2 - 30);
-    ctx.font = '24px sans-serif';
-    ctx.fillText('Нажмите R или 🔄 чтобы сыграть ещё', W / 2, H / 2 + 30);
+    ctx.font = '24px sans-serif'; ctx.fillText('Нажмите R или 🔄 чтобы сыграть ещё', W / 2, H / 2 + 30);
   }
 
-  // Отрисовка джойстика
   if (joystick.active) {
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(joystick.startX, joystick.startY, 40, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(joystick.startX, joystick.startY, 40, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; ctx.lineWidth = 2; ctx.stroke();
 
-    const jdx = joystick.curX - joystick.startX;
-    const jdy = joystick.curY - joystick.startY;
-    const dist = Math.hypot(jdx, jdy);
-    const maxDist = 40;
+    const jdx = joystick.curX - joystick.startX, jdy = joystick.curY - joystick.startY;
+    const dist = Math.hypot(jdx, jdy), maxDist = 40;
     const stickX = joystick.startX + (dist > maxDist ? (jdx / dist) * maxDist : jdx);
     const stickY = joystick.startY + (dist > maxDist ? (jdy / dist) * maxDist : jdy);
 
-    ctx.beginPath();
-    ctx.arc(stickX, stickY, 20, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(stickX, stickY, 20, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'; ctx.fill();
     ctx.restore();
   }
 }
 
 // ============================================================
-//  СПРАЙТЫ (Ребёнок, Машина, Собака, Птица, Стрелка)
+//  СПРАЙТЫ
 // ============================================================
 function drawKid(x, y, size, facing = 1, animTime = 0, moving = false) {
   const cx = x + size / 2, cy = y + size / 2, s = size / 30;
   const swing = moving ? Math.sin(animTime) : 0;
   const bob = moving ? Math.abs(Math.sin(animTime)) * 1.5 : 0;
   const legSwing = swing * 2.5, armSwing = swing * 2;
-  ctx.save();
-  ctx.translate(cx, cy - bob);
-  ctx.scale(s * facing, s);
+  ctx.save(); ctx.translate(cx, cy - bob); ctx.scale(s * facing, s);
   
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath(); ctx.ellipse(0, 14 + bob / s, 11, 4, 0, 0, Math.PI * 2); ctx.fill();
   
-  ctx.save();
-  ctx.rotate(-swing * 0.08);
-  ctx.fillStyle = '#1565c0';
-  ctx.beginPath(); ctx.roundRect(-11, -8, 10, 14, 3); ctx.fill();
+  ctx.save(); ctx.rotate(-swing * 0.08);
+  ctx.fillStyle = '#1565c0'; ctx.beginPath(); ctx.roundRect(-11, -8, 10, 14, 3); ctx.fill();
   ctx.strokeStyle = '#0d47a1'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(-6, -6); ctx.lineTo(-2, 2); ctx.stroke();
   ctx.fillStyle = '#42a5f5'; ctx.fillRect(-10, 0, 8, 4);
   ctx.restore();
   
-  ctx.save();
-  ctx.translate(-3, 6); ctx.rotate(-legSwing * 0.15);
+  ctx.save(); ctx.translate(-3, 6); ctx.rotate(-legSwing * 0.15);
   ctx.fillStyle = '#37474f'; ctx.fillRect(-2, 0, 4, 8);
   ctx.fillStyle = '#212121'; ctx.fillRect(-3, 7, 5, 3);
   ctx.restore();
   
-  ctx.save();
-  ctx.translate(3, 6); ctx.rotate(legSwing * 0.15);
+  ctx.save(); ctx.translate(3, 6); ctx.rotate(legSwing * 0.15);
   ctx.fillStyle = '#37474f'; ctx.fillRect(-2, 0, 4, 8);
   ctx.fillStyle = '#212121'; ctx.fillRect(-2, 7, 5, 3);
   ctx.restore();
   
-  ctx.fillStyle = '#ff7043';
-  ctx.beginPath(); ctx.roundRect(-7, -6, 14, 14, 4); ctx.fill();
+  ctx.fillStyle = '#ff7043'; ctx.beginPath(); ctx.roundRect(-7, -6, 14, 14, 4); ctx.fill();
   ctx.strokeStyle = '#bf360c'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(0, 7); ctx.stroke();
   
-  ctx.save();
-  ctx.translate(-8, 0); ctx.rotate(armSwing * 0.25);
-  ctx.fillStyle = '#ffccbc'; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
+  ctx.save(); ctx.translate(-8, 0); ctx.rotate(armSwing * 0.25);
+  ctx.fillStyle = '#ffccbc'; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   
-  ctx.save();
-  ctx.translate(8, 0); ctx.rotate(-armSwing * 0.25);
-  ctx.fillStyle = '#ffccbc'; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
+  ctx.save(); ctx.translate(8, 0); ctx.rotate(-armSwing * 0.25);
+  ctx.fillStyle = '#ffccbc'; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   
   ctx.fillStyle = '#ffccbc'; ctx.beginPath(); ctx.arc(0, -12, 7, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#5d4037';
-  ctx.beginPath(); ctx.arc(0, -14, 7, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#5d4037'; ctx.beginPath(); ctx.arc(0, -14, 7, Math.PI, Math.PI * 2); ctx.fill();
   ctx.fillRect(-7, -14, 14, 3);
   
   ctx.fillStyle = '#212121';
-  ctx.beginPath();
-  ctx.arc(-2.5, -12, 1.1, 0, Math.PI * 2);
-  ctx.arc( 2.5, -12, 1.1, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(-2.5, -12, 1.1, 0, Math.PI * 2); ctx.arc(2.5, -12, 1.1, 0, Math.PI * 2); ctx.fill();
   
   ctx.strokeStyle = '#212121'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(0, -10, 2.5, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
   
   ctx.fillStyle = 'rgba(255,100,100,0.35)';
-  ctx.beginPath();
-  ctx.arc(-4.5, -10, 1.4, 0, Math.PI * 2);
-  ctx.arc( 4.5, -10, 1.4, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(-4.5, -10, 1.4, 0, Math.PI * 2); ctx.arc(4.5, -10, 1.4, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 
@@ -712,56 +567,38 @@ function drawCar(o) {
   let angle = 0;
   if (Math.abs(o.vx) > Math.abs(o.vy)) angle = o.vx > 0 ? 0 : Math.PI;
   else angle = o.vy > 0 ? Math.PI / 2 : -Math.PI / 2;
-  ctx.save();
-  ctx.translate(cx, cy); ctx.rotate(angle);
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle);
   const w = o.w, h = o.h;
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.beginPath(); ctx.roundRect(-w/2 + 3, -h/2 + 4, w, h, 8); ctx.fill();
-  ctx.fillStyle = o.color;
-  ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, 8); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.roundRect(-w/2 + 3, -h/2 + 4, w, h, 8); ctx.fill();
+  ctx.fillStyle = o.color; ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, 8); ctx.fill();
   ctx.fillStyle = 'rgba(180,220,255,0.85)';
   ctx.beginPath(); ctx.roundRect(w/2 - 22, -h/2 + 6, 16, h - 12, 4); ctx.fill();
   ctx.beginPath(); ctx.roundRect(-w/2 + 6, -h/2 + 6, 14, h - 12, 4); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.beginPath(); ctx.roundRect(-w/2 + 26, -h/2 + 8, w - 52, h - 16, 3); ctx.fill();
-  ctx.fillStyle = '#fff59d';
-  ctx.beginPath();
-  ctx.arc(w/2 - 4, -h/2 + 10, 3, 0, Math.PI * 2);
-  ctx.arc(w/2 - 4,  h/2 - 10, 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#ef5350';
-  ctx.beginPath();
-  ctx.arc(-w/2 + 4, -h/2 + 10, 2.5, 0, Math.PI * 2);
-  ctx.arc(-w/2 + 4,  h/2 - 10, 2.5, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.beginPath(); ctx.roundRect(-w/2 + 26, -h/2 + 8, w - 52, h - 16, 3); ctx.fill();
+  ctx.fillStyle = '#fff59d'; ctx.beginPath();
+  ctx.arc(w/2 - 4, -h/2 + 10, 3, 0, Math.PI * 2); ctx.arc(w/2 - 4, h/2 - 10, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ef5350'; ctx.beginPath();
+  ctx.arc(-w/2 + 4, -h/2 + 10, 2.5, 0, Math.PI * 2); ctx.arc(-w/2 + 4, h/2 - 10, 2.5, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 
 function drawDog(o) {
   const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
   const dir = o.vx >= 0 ? 1 : -1;
-  ctx.save();
-  ctx.translate(cx, cy); ctx.scale(dir, 1);
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(dir, 1);
   const w = o.w, h = o.h;
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.beginPath(); ctx.ellipse(0, h/2 - 4, w/2 - 2, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(0, h/2 - 4, w/2 - 2, 4, 0, 0, Math.PI * 2); ctx.fill();
   const wag = Math.sin(Date.now() / 150) * 0.3;
-  ctx.save();
-  ctx.translate(-w/2 + 4, 0); ctx.rotate(wag);
+  ctx.save(); ctx.translate(-w/2 + 4, 0); ctx.rotate(wag);
   ctx.strokeStyle = o.color; ctx.lineWidth = 3; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-8, -4, -10, -8); ctx.stroke();
-  ctx.restore();
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-8, -4, -10, -8); ctx.stroke(); ctx.restore();
   ctx.fillStyle = o.color;
   ctx.beginPath(); ctx.ellipse(0, 0, w/2 - 4, h/2 - 6, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillRect(-w/2 + 4, h/2 - 10, 5, 8);
-  ctx.fillRect( w/2 - 9, h/2 - 10, 5, 8);
+  ctx.fillRect(-w/2 + 4, h/2 - 10, 5, 8); ctx.fillRect(w/2 - 9, h/2 - 10, 5, 8);
   ctx.beginPath(); ctx.arc(w/2 - 6, -h/4, 7, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#3e2723';
-  ctx.beginPath(); ctx.arc(w/2 - 2, -h/4 + 1, 3, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = o.color;
-  ctx.beginPath(); ctx.ellipse(w/2 - 8, -h/4 - 6, 3, 5, -0.3, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.arc(w/2 - 7, -h/4 - 1, 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3e2723'; ctx.beginPath(); ctx.arc(w/2 - 2, -h/4 + 1, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = o.color; ctx.beginPath(); ctx.ellipse(w/2 - 8, -h/4 - 6, 3, 5, -0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(w/2 - 7, -h/4 - 1, 1.3, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 
@@ -769,72 +606,76 @@ function drawBird(o) {
   const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
   const dir = o.vx >= 0 ? 1 : -1;
   const flap = Math.sin(Date.now() / 80) * 0.6;
-  ctx.save();
-  ctx.translate(cx, cy); ctx.scale(dir, 1);
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(dir, 1);
   const w = o.w, h = o.h;
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  ctx.beginPath(); ctx.ellipse(4, h/2 + 6, w/2 - 2, 3, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.save();
-  ctx.translate(-2, -2); ctx.rotate(-flap);
-  ctx.fillStyle = o.color;
-  ctx.beginPath();
-  ctx.moveTo(0, 0); ctx.quadraticCurveTo(-w/2 - 4, -h/2 - 2, -w/2 - 2, 2);
-  ctx.quadraticCurveTo(-w/2, h/3, 0, 0); ctx.fill();
-  ctx.restore();
-  ctx.save();
-  ctx.translate(-2, 2); ctx.rotate(flap);
-  ctx.fillStyle = o.color;
-  ctx.beginPath();
-  ctx.moveTo(0, 0); ctx.quadraticCurveTo(-w/2 - 4, h/2 + 2, -w/2 - 2, -2);
-  ctx.quadraticCurveTo(-w/2, -h/3, 0, 0); ctx.fill();
-  ctx.restore();
+  ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(4, h/2 + 6, w/2 - 2, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.translate(-2, -2); ctx.rotate(-flap);
+  ctx.fillStyle = o.color; ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.quadraticCurveTo(-w/2 - 4, -h/2 - 2, -w/2 - 2, 2); ctx.quadraticCurveTo(-w/2, h/3, 0, 0); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.translate(-2, 2); ctx.rotate(flap);
+  ctx.fillStyle = o.color; ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.quadraticCurveTo(-w/2 - 4, h/2 + 2, -w/2 - 2, -2); ctx.quadraticCurveTo(-w/2, -h/3, 0, 0); ctx.fill(); ctx.restore();
   ctx.fillStyle = o.color;
   ctx.beginPath(); ctx.ellipse(0, 0, w/2 - 3, h/4, 0, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(w/2 - 4, 0, 4, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#ffb300';
-  ctx.beginPath(); ctx.moveTo(w/2, 0); ctx.lineTo(w/2 + 4, -1.5); ctx.lineTo(w/2 + 4, 1.5); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.arc(w/2 - 3, -1, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffb300'; ctx.beginPath();
+  ctx.moveTo(w/2, 0); ctx.lineTo(w/2 + 4, -1.5); ctx.lineTo(w/2 + 4, 1.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(w/2 - 3, -1, 1, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 
 function drawCompassArrow(px, py, targetX, targetY) {
-  const tx = targetX + shop.w / 2;
-  const ty = targetY + shop.h / 2;
-  const cx = px + player.size / 2;
-  const cy = py + player.size / 2;
+  const tx = targetX + shop.w / 2, ty = targetY + shop.h / 2;
+  const cx = px + player.size / 2, cy = py + player.size / 2;
   const angle = Math.atan2(ty - cy, tx - cx);
   const dist = 35; 
 
   ctx.save();
   ctx.translate(cx + Math.cos(angle) * dist, cy + Math.sin(angle) * dist);
   ctx.rotate(angle);
-
   const bounce = Math.sin(Date.now() / 200) * 3;
   ctx.translate(bounce, 0);
-
-  ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-  ctx.lineWidth = 1.5;
-
+  ctx.fillStyle = 'rgba(255, 215, 0, 0.8)'; ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(8, 0);
-  ctx.lineTo(-6, -7);
-  ctx.lineTo(-3, 0);
-  ctx.lineTo(-6, 7);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
+  ctx.moveTo(8, 0); ctx.lineTo(-6, -7); ctx.lineTo(-3, 0); ctx.lineTo(-6, 7); ctx.closePath();
+  ctx.fill(); ctx.stroke();
   ctx.restore();
 }
 
 // ============================================================
-//  ЦИКЛ
+//  ЦИКЛ И СЧЕТЧИК FPS
 // ============================================================
-resize(); // Инициализация размера при старте
+resize();
+
+let lastTime = performance.now();
+let frames = 0;
+let fps = 0;
+let fpsTimer = 0;
+
 function loop() {
+  const now = performance.now();
+  frames++;
+  fpsTimer += now - lastTime;
+  lastTime = now;
+  
+  if (fpsTimer >= 1000) {
+    fps = frames;
+    frames = 0;
+    fpsTimer = 0;
+  }
+
   update();
   draw();
+  
+  // Отрисовка счетчика FPS (для отладки)
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(10, 10, 80, 30);
+  ctx.fillStyle = fps < 30 ? '#ff5252' : '#4caf50'; // Красный если < 30, зелёный если >= 30
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('FPS: ' + fps, 15, 25);
+
   requestAnimationFrame(loop);
 }
 loop();

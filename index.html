@@ -168,9 +168,9 @@ mapImage.onload = () => {
     WORLD_H = mapImage.height / scale;
   }
   
-  // Обновленные координаты магазина (под дом 100)
+  // Обновленные координаты магазина (опущен на 25px)
   shop.x = 81 * (WORLD_W / 960);
-  shop.y = 265 * (WORLD_H / 640);
+  shop.y = 290 * (WORLD_H / 640);
   player.x = WORLD_W - 120;
   player.y = WORLD_H - 80;
   
@@ -198,13 +198,13 @@ const player = {
 };
 
 // ============================================================
-//  МАГАЗИН (Спущен ниже, сужен и вытянут)
+//  МАГАЗИН (Опущен на 25px, в 2 раза шире, в 3 раза ниже)
 // ============================================================
 const shop = {
   x: 81 * (WORLD_W / 960),
-  y: 265 * (WORLD_H / 640),  // Опущен вниз
-  w: 45,                     // Сужен
-  h: 75,                     // Вытянут
+  y: 290 * (WORLD_H / 640),  // Опущен вниз на 25px
+  w: 90,                     // В 2 раза шире (было 45)
+  h: 25,                     // В 3 раза ниже (было 75)
   color: '#ffd600'
 };
 
@@ -248,7 +248,7 @@ const obstacles = [
   // Собаки
   { type: 'dog', x: 500 * (WORLD_W / 960), y: 450 * (WORLD_H / 640), w: 40, h: 40, color: '#795548', vx: 1.2,  vy: 0    },
   { type: 'dog', x: 700 * (WORLD_W / 960), y: 250 * (WORLD_H / 640), w: 40, h: 40, color: '#8d6e63', vx: -1.0, vy: 0.8  },
-  // Птицы (увеличенные)
+  // Птицы
   { type: 'bird', x: 700 * (WORLD_W / 960), y: 200 * (WORLD_H / 640), w: 40, h: 40, color: '#e91e63', vx: -2.0, vy: 1.0  },
   { type: 'bird', x: 450 * (WORLD_W / 960), y: 500 * (WORLD_H / 640), w: 40, h: 40, color: '#9c27b0', vx: 1.8,  vy: -1.2 },
   { type: 'bird', x: 900 * (WORLD_W / 960), y: 400 * (WORLD_H / 640), w: 40, h: 40, color: '#3f51b5', vx: 1.5,  vy: 1.5  }
@@ -304,15 +304,12 @@ function getCanvasCoords(e) {
 function handlePointerDown(e) {
   initAudio();
   const pos = getCanvasCoords(e);
-  
-  // Джойстик появляется в любой точке
   joystick.active = true; 
   joystick.startX = pos.x; 
   joystick.startY = pos.y;
   joystick.curX = pos.x; 
   joystick.curY = pos.y;
   joystick.id = (e.touches && e.touches.length > 0) ? e.touches[0].identifier : 'mouse';
-  
   e.preventDefault();
 }
 
@@ -488,29 +485,40 @@ function draw() {
 
   ctx.restore();
 
-  if (gameOver) {
-    ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 48px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('Ой! Попался 😅', W / 2, H / 2 - 30);
-    ctx.font = '24px sans-serif'; ctx.fillText('Нажмите R или 🔄 чтобы начать заново', W / 2, H / 2 + 30);
-  }
-  if (win) {
-    ctx.fillStyle = 'rgba(0,100,0,0.8)'; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 48px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('🎉 Ты в «Играйке»!', W / 2, H / 2 - 30);
-    ctx.font = '24px sans-serif'; ctx.fillText('Нажмите R или 🔄 чтобы сыграть ещё', W / 2, H / 2 + 30);
+  // Адаптивный текст для экранов победы/проигрыша
+  if (gameOver || win) {
+    ctx.fillStyle = gameOver ? 'rgba(0,0,0,0.7)' : 'rgba(0,100,0,0.8)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // Размер шрифта зависит от ширины экрана (на телефоне будет меньше)
+    let titleSize = Math.min(W * 0.1, 48); // Максимум 48px, но не больше 10% ширины экрана
+    let subSize = Math.min(W * 0.05, 24);  // Максимум 24px, но не больше 5% ширины экрана
+
+    ctx.font = `bold ${titleSize}px sans-serif`;
+    if (gameOver) {
+      ctx.fillText('Ой! Попался 😅', W / 2, H / 2 - 40);
+      ctx.font = `${subSize}px sans-serif`;
+      ctx.fillText('Нажмите R или 🔄', W / 2, H / 2 + 30);
+      ctx.fillText('чтобы начать заново', W / 2, H / 2 + 70);
+    } else {
+      ctx.fillText('🎉 Ты в «Играйке»!', W / 2, H / 2 - 40);
+      ctx.font = `${subSize}px sans-serif`;
+      ctx.fillText('Нажмите R или 🔄', W / 2, H / 2 + 30);
+      ctx.fillText('чтобы сыграть ещё', W / 2, H / 2 + 70);
+    }
   }
 
   // Отрисовка джойстика
   if (joystick.active) {
     ctx.save();
     
-    // Тень под джойстиком
     ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
     ctx.shadowBlur = 10;
     ctx.shadowOffsetY = 5;
 
-    // База джойстика
     ctx.beginPath();
     ctx.arc(joystick.startX, joystick.startY, 50, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
@@ -521,7 +529,6 @@ function draw() {
 
     ctx.shadowColor = 'transparent';
 
-    // Внутренний стик
     const jdx = joystick.curX - joystick.startX;
     const jdy = joystick.curY - joystick.startY;
     const dist = Math.hypot(jdx, jdy);
@@ -541,7 +548,6 @@ function draw() {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Блик на стике
     ctx.shadowColor = 'transparent';
     ctx.beginPath();
     ctx.arc(stickX - 5, stickY - 5, 8, 0, Math.PI * 2);

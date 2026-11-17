@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Играйка — Доберись до магазина!</title>
+<style>
+  body {
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: #222;
+    font-family: sans-serif;
+    touch-action: none; /* Отключаем скролл страницы пальцем */
+    overflow: hidden;
+  }
+  canvas {
+    border: 2px solid #fff;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    max-width: 100vw;
+    max-height: 100vh;
+    object-fit: contain;
+  }
+  /* Кнопка рестарта для телефона */
+  #mobile-restart {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(0,0,0,0.5);
+    color: white;
+    border: 2px solid white;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+    display: none; /* Скрыта на ПК */
+    cursor: pointer;
+    z-index: 100;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  @media (pointer: coarse) {
+    #mobile-restart { display: block; } /* Показываем на сенсорных экранах */
+  }
+</style>
+</head>
+<body>
+<button id="mobile-restart">🔄</button>
+<canvas id="game" width="960" height="640"></canvas>
+
+<script>
+// ============================================================
+//  НАСТРОЙКИ
+// ============================================================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width;
+const H = canvas.height;
+
+// ============================================================
+//  МИР И КАМЕРА
+// ============================================================
+let WORLD_W = 1920;
+let WORLD_H = 1280;
+
+const camera = {
+  x: 0,
+  y: 0,
+  lerp: 0.12 // Плавность камеры (0.1 - плавно, 1.0 - мгновенно)
+};
+
+// ============================================================
+//  ЗВУКОВОЙ ДВИЖОК (Web Audio API)
+// ============================================================
+let audioCtx = null;
+function initAudio() {
+  if (audioCtx) return;
+  try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+}
+function playTone(freq, duration, type = 'sine', volume = 0.15, when = 0) {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime + when;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  gain.gain.setValueAtTime(volume, t);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t); osc.stop(t + duration);
+}
+function playHit() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(220, t);
+  osc.frequency.exponentialRampToValueAtTime(60, t + 0.4);
+  gain.gain.setValueAtTime(0.3, t);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t); osc.stop(t + 0.45);
+}
+function playStep() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(180 + Math.random() * 40, t);
+  osc.frequency.exponentialRampToValueAtTime(90, t + 0.07);
+  gain.gain.setValueAtTime(0.08, t);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t); osc.stop(t + 0.09);
+}
+function playWin() {
+  if (!audioCtx) return;
+  const notes = [523.25, 659.25, 783.99, 1046.5];
+  notes.forEach((f, i) => playTone(f, 0.25, 'sine', 0.18, i * 0.13));
+}
+function playClick() { playTone(880, 0.06, 'square', 0.1); }
+
+// ============================================================
+//  ФОН-КАРТА (с сохранением пропорций)
+// ============================================================
+const mapImage = new Image();
+let mapReady = false;
+mapImage.src = 'map.png';
+mapImage.onload = () => {
+  mapReady = true;
+  // Подстраиваем мир под пропорции карты
+  const imgRatio = mapImage.width / mapImage.height;
+  const worldRatio = WORLD_W / WORLD_H;
+  if (imgRatio > worldRatio) {
+    const scale = mapImage.height / WORLD_H;
+    WORLD_W = mapImage.width / scale;
+  } else {
+    const scale = mapImage.width / WORLD_W;
+    WORLD_H = mapImage.height / scale;
+  }
+  console.log(`Мир: ${WORLD_W.toFixed(0)}×${WORLD_H.toFixed(0)}`);
+  
+  // Обновляем позицию магазина и игрока под новый мир
+  shop.x = 81 * (WORLD_W / 960);
+  shop.y = 232 * (WORLD_H / 640);
+  player.x = WORLD_W - 120;
+  player.y = WORLD_H - 80;
+  camera.x = player.x - W / 2;
+  camera.y = player.y - H / 2;
+};
+mapImage.onerror = () => { console.warn('map.png не найден — заглушка'); };
+
+// ============================================================
+//  ИГРОК
+// ============================================================
+const player = {
+  x: WORLD_W - 120,
+  y: WORLD_H - 80,
+  size: 30,
+  speed: 3,
+  facing: 1,
+  animTime: 0,
+  moving: false,
+  stepTimer: 0
+};
+
+// ============================================================
+//  МАГАЗИН
+// ============================================================
+const shop = {
+  x: 81 * (WORLD_W / 960),
+  y: 232 * (WORLD_H / 640),
+  w: 60,
+  h: 50,
+  color: '#ffd600'
+};
+
+// ============================================================
+//  ПРЕПЯТСТВИЯ
+// ============================================================
+const obstacles = [
+  // Машины (по дорогам)
+  {
+    type: 'car', color: '#1976d2', w: 90, h: 40,
+    speed: 2.2,
+    path: [ 
+      { x: -100, y: 560 * (WORLD_H / 640) }, 
+      { x: WORLD_W + 100, y: 560 * (WORLD_H / 640) } 
+    ],
+    pathIndex: 1,
+    x: -100, y: 560 * (WORLD_H / 640), vx: 1, vy: 0
+  },
+  {
+    type: 'car', color: '#43a047', w: 90, h: 40,
+    speed: 1.8,
+    path: [ 
+      { x: WORLD_W + 100, y: 580 * (WORLD_H / 640) }, 
+      { x: -100, y: 580 * (WORLD_H / 640) } 
+    ],
+    pathIndex: 1,
+    x: WORLD_W + 100, y: 580 * (WORLD_H / 640), vx: -1, vy: 0
+  },
+  {
+    type: 'car', color: '#f57c00', w: 40, h: 90,
+    speed: 2.0,
+    path: [ 
+      { x: 1080 * (WORLD_W / 960), y: -100 }, 
+      { x: 1080 * (WORLD_W / 960), y: WORLD_H + 100 } 
+    ],
+    pathIndex: 1,
+    x: 1080 * (WORLD_W / 960), y: -100, vx: 0, vy: 1
+  },
+  {
+    type: 'car', color: '#c62828', w: 90, h: 40,
+    speed: 1.6,
+    path: [ 
+      { x: -100, y: 360 * (WORLD_H / 640) }, 
+      { x: 800 * (WORLD_W / 960), y: 360 * (WORLD_H / 640) }, 
+      { x: 800 * (WORLD_W / 960), y: 320 * (WORLD_H / 640) }, 
+      { x: WORLD_W + 100, y: 320 * (WORLD_H / 640) } 
+    ],
+    pathIndex: 1,
+    x: -100, y: 360 * (WORLD_H / 640), vx: 1, vy: 0
+  },
+  // Собаки
+  { type: 'dog', x: 500 * (WORLD_W / 960), y: 450 * (WORLD_H / 640), w: 40, h: 40, color: '#795548', vx: 1.2,  vy: 0    },
+  { type: 'dog', x: 700 * (WORLD_W / 960), y: 250 * (WORLD_H / 640), w: 40, h: 40, color: '#8d6e63', vx: -1.0, vy: 0.8  },
+  // Птицы
+  { type: 'bird', x: 700 * (WORLD_W / 960), y: 200 * (WORLD_H / 640), w: 30, h: 30, color: '#e91e63', vx: -2.0, vy: 1.0  },
+  { type: 'bird', x: 450 * (WORLD_W / 960), y: 500 * (WORLD_H / 640), w: 30, h: 30, color: '#9c27b0', vx: 1.8,  vy: -1.2 },
+  { type: 'bird', x: 900 * (WORLD_W / 960), y: 400 * (WORLD_H / 640), w: 30, h: 30, color: '#3f51b5', vx: 1.5,  vy: 1.5  }
+];
+
+// ============================================================
+//  УПРАВЛЕНИЕ (Клавиатура + Сенсор)
+// ============================================================
+const keys = {};
+let joystick = {
+  active: false,
+  startX: 0, startY: 0,
+  curX: 0, curY: 0,
+  id: null
+};
+
+// --- Клавиатура ---
+document.addEventListener('keydown', e => {
+  initAudio();
+  const k = e.key.toLowerCase();
+  
+  // Стрелки (работают одинаково на любой раскладке)
+  if (k === 'arrowup')    keys['up'] = true;
+  if (k === 'arrowdown')  keys['down'] = true;
+  if (k === 'arrowleft')  keys['left'] = true;
+  if (k === 'arrowright') keys['right'] = true;
+  
+  // WASD (e.code работает независимо от раскладки)
+  if (e.code === 'KeyW') keys['up'] = true;
+  if (e.code === 'KeyS') keys['down'] = true;
+  if (e.code === 'KeyA') keys['left'] = true;
+  if (e.code === 'KeyD') keys['right'] = true;
+  
+  // Рестарт (R) на русской и английской
+  if (e.code === 'KeyR') {
+    playClick();
+    resetGame();
+  }
+
+  if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) {
+    e.preventDefault();
+  }
+});
+
+document.addEventListener('keyup', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'arrowup')    keys['up'] = false;
+  if (k === 'arrowdown')  keys['down'] = false;
+  if (k === 'arrowleft')  keys['left'] = false;
+  if (k === 'arrowright') keys['right'] = false;
+  
+  if (e.code === 'KeyW') keys['up'] = false;
+  if (e.code === 'KeyS') keys['down'] = false;
+  if (e.code === 'KeyA') keys['left'] = false;
+  if (e.code === 'KeyD') keys['right'] = false;
+});
+
+// --- Сенсорное управление (Джойстик) ---
+function getCanvasCoords(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  let clientX, clientY;
+  if (e.touches && e.touches.length > 0) {
+    clientX = e.touches[0].clientX;
+    clientY = e.touches[0].clientY;
+  } else {
+    clientX = e.clientX;
+    clientY = e.clientY;
+  }
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY
+  };
+}
+
+function handlePointerDown(e) {
+  initAudio();
+  const pos = getCanvasCoords(e);
+  if (pos.x < W / 2) { // Левая половина экрана для джойстика
+    joystick.active = true;
+    joystick.startX = pos.x;
+    joystick.startY = pos.y;
+    joystick.curX = pos.x;
+    joystick.curY = pos.y;
+    joystick.id = (e.touches && e.touches.length > 0) ? e.touches[0].identifier : 'mouse';
+    e.preventDefault();
+  }
+}
+
+function handlePointerMove(e) {
+  if (!joystick.active) return;
+  if (e.touches) {
+    for (let i = 0; i < e.touches.length; i++) {
+      if (e.touches[i].identifier === joystick.id) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        joystick.curX = (e.touches[i].clientX - rect.left) * scaleX;
+        joystick.curY = (e.touches[i].clientY - rect.top) * scaleY;
+        break;
+      }
+    }
+  } else {
+    const pos = getCanvasCoords(e);
+    joystick.curX = pos.x;
+    joystick.curY = pos.y;
+  }
+  e.preventDefault();
+}
+
+function handlePointerUp(e) {
+  if (e.touches) {
+    let stillActive = false;
+    for (let i = 0; i < e.touches.length; i++) {
+      if (e.touches[i].identifier === joystick.id) stillActive = true;
+    }
+    if (!stillActive) {
+      joystick.active = false;
+      joystick.id = null;
+    }
+  } else {
+    joystick.active = false;
+    joystick.id = null;
+  }
+}
+
+canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+canvas.addEventListener('touchmove', handlePointerMove, { passive: false });
+canvas.addEventListener('touchend', handlePointerUp);
+canvas.addEventListener('touchcancel', handlePointerUp);
+
+// Тест мышкой на ПК
+canvas.addEventListener('mousedown', handlePointerDown);
+window.addEventListener('mousemove', handlePointerMove);
+window.addEventListener('mouseup', handlePointerUp);
+
+// Кнопка рестарта для мобилки
+document.getElementById('mobile-restart').addEventListener('click', () => {
+  initAudio();
+  playClick();
+  resetGame();
+});
+
+// ============================================================
+//  СОСТОЯНИЕ
+// ============================================================
+let gameOver = false;
+let win = false;
+
+function resetGame() {
+  player.x = WORLD_W - 120;
+  player.y = WORLD_H - 80;
+  player.facing = 1;
+  player.animTime = 0;
+  player.moving = false;
+  player.stepTimer = 0;
+  camera.x = player.x - W / 2;
+  camera.y = player.y - H / 2;
+  gameOver = false;
+  win = false;
+}
+
+// ============================================================
+//  ЛОГИКА
+// ============================================================
+function update() {
+  if (gameOver || win) return;
+
+  // --- Движение ---
+  let dx = 0, dy = 0;
+  
+  if (keys['left'])  { dx -= 1; player.facing = -1; }
+  if (keys['right']) { dx += 1; player.facing =  1; }
+  if (keys['up'])    dy -= 1;
+  if (keys['down'])  dy += 1;
+
+  if (joystick.active) {
+    const jdx = joystick.curX - joystick.startX;
+    const jdy = joystick.curY - joystick.startY;
+    const dist = Math.hypot(jdx, jdy);
+    if (dist > 10) {
+      dx = jdx / dist;
+      dy = jdy / dist;
+      if (dx > 0.1) player.facing = 1;
+      if (dx < -0.1) player.facing = -1;
+    }
+  }
+
+  player.moving = (dx !== 0 || dy !== 0);
+
+  if (dx !== 0 && dy !== 0) {
+    const len = Math.hypot(dx, dy);
+    dx /= len;
+    dy /= len;
+  }
+
+  player.x += dx * player.speed;
+  player.y += dy * player.speed;
+
+  if (player.moving) player.animTime += 0.18;
+  else player.animTime *= 0.85;
+
+  if (player.moving) {
+    player.stepTimer += 1 / 60;
+    if (player.stepTimer >= 0.3) { player.stepTimer = 0; playStep(); }
+  } else player.stepTimer = 0;
+
+  // Границы мира
+  player.x = Math.max(0, Math.min(WORLD_W - player.size, player.x));
+  player.y = Math.max(0, Math.min(WORLD_H - player.size, player.y));
+
+  const HB = 22;
+  const hx = player.x + (player.size - HB) / 2;
+  const hy = player.y + (player.size - HB) / 2;
+
+  // Препятствия
+  for (const o of obstacles) {
+    if (o.type === 'car' && o.path) {
+      const target = o.path[o.pathIndex];
+      const dxo = target.x - o.x;
+      const dyo = target.y - o.y;
+      const dist = Math.hypot(dxo, dyo);
+      if (dist < 2) {
+        o.pathIndex = (o.pathIndex + 1) % o.path.length;
+      } else {
+        o.vx = (dxo / dist) * o.speed;
+        o.vy = (dyo / dist) * o.speed;
+        o.x += o.vx;
+        o.y += o.vy;
+      }
+    } else {
+      o.x += o.vx;
+      o.y += o.vy;
+      if (o.x <= 0 || o.x + o.w >= WORLD_W) o.vx *= -1;
+      if (o.y <= 0 || o.y + o.h >= WORLD_H) o.vy *= -1;
+    }
+
+    if (hx < o.x + o.w && hx + HB > o.x &&
+        hy < o.y + o.h && hy + HB > o.y) {
+      if (!gameOver) { gameOver = true; playHit(); }
+    }
+  }
+
+  // Победа
+  if (hx + HB > shop.x && hx < shop.x + shop.w &&
+      hy + HB > shop.y && hy < shop.y + shop.h) {
+    if (!win) { win = true; playWin(); }
+  }
+
+  // Камера
+  let targetCamX = player.x + player.size / 2 - W / 2;
+  let targetCamY = player.y + player.size / 2 - H / 2;
+  targetCamX = Math.max(0, Math.min(WORLD_W - W, targetCamX));
+  targetCamY = Math.max(0, Math.min(WORLD_H - H, targetCamY));
+  camera.x += (targetCamX - camera.x) * camera.lerp;
+  camera.y += (targetCamY - camera.y) * camera.lerp;
+}
+
+// ============================================================
+//  ОТРИСОВКА
+// ============================================================
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.translate(-camera.x, -camera.y);   // Сдвиг мира под камеру
+
+  // Фон
+  if (mapReady) {
+    ctx.drawImage(mapImage, 0, 0, WORLD_W, WORLD_H);
+  } else {
+    ctx.fillStyle = '#8bc34a';
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+    ctx.fillStyle = '#333';
+    ctx.font = '20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Положите map.png рядом с game.html', WORLD_W / 2, WORLD_H / 2);
+  }
+
+  // Магазин
+  ctx.fillStyle = shop.color;
+  ctx.fillRect(shop.x, shop.y, shop.w, shop.h);
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(shop.x, shop.y, shop.w, shop.h);
+  ctx.fillStyle = '#333';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Играйка', shop.x + shop.w / 2, shop.y + shop.h / 2);
+
+  // Препятствия
+  for (const o of obstacles) {
+    if (o.type === 'car')  drawCar(o);
+    if (o.type === 'dog')  drawDog(o);
+    if (o.type === 'bird') drawBird(o);
+  }
+
+  // Игрок
+  drawKid(player.x, player.y, player.size, player.facing, player.animTime, player.moving);
+
+  // Стрелка-компас
+  if (!gameOver && !win) {
+    drawCompassArrow(player.x, player.y, shop.x, shop.y);
+  }
+
+  ctx.restore();   // Конец мировых координат
+
+  // ---- UI поверх камеры ----
+  if (gameOver) {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 48px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Ой! Попался 😅', W / 2, H / 2 - 30);
+    ctx.font = '24px sans-serif';
+    ctx.fillText('Нажмите R, чтобы начать заново', W / 2, H / 2 + 30);
+  }
+  if (win) {
+    ctx.fillStyle = 'rgba(0,100,0,0.8)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 48px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🎉 Ты в «Играйке»!', W / 2, H / 2 - 30);
+    ctx.font = '24px sans-serif';
+    ctx.fillText('Нажмите R, чтобы сыграть ещё', W / 2, H / 2 + 30);
+  }
+
+  // Отрисовка джойстика
+  if (joystick.active) {
+    ctx.save();
+    // База
+    ctx.beginPath();
+    ctx.arc(joystick.startX, joystick.startY, 40, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Стик
+    const jdx = joystick.curX - joystick.startX;
+    const jdy = joystick.curY - joystick.startY;
+    const dist = Math.hypot(jdx, jdy);
+    const maxDist = 40;
+    const stickX = joystick.startX + (dist > maxDist ? (jdx / dist) * maxDist : jdx);
+    const stickY = joystick.startY + (dist > maxDist ? (jdy / dist) * maxDist : jdy);
+
+    ctx.beginPath();
+    ctx.arc(stickX, stickY, 20, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ============================================================
+//  РЕБЁНОК С РЮКЗАКОМ
+// ============================================================
+function drawKid(x, y, size, facing = 1, animTime = 0, moving = false) {
+  const cx = x + size / 2, cy = y + size / 2, s = size / 30;
+  const swing = moving ? Math.sin(animTime) : 0;
+  const bob = moving ? Math.abs(Math.sin(animTime)) * 1.5 : 0;
+  const legSwing = swing * 2.5, armSwing = swing * 2;
+  ctx.save();
+  ctx.translate(cx, cy - bob);
+  ctx.scale(s * facing, s);
+  // Тень
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.ellipse(0, 14 + bob / s, 11, 4, 0, 0, Math.PI * 2); ctx.fill();
+  // Рюкзак
+  ctx.save();
+  ctx.rotate(-swing * 0.08);
+  ctx.fillStyle = '#1565c0';
+  ctx.beginPath(); ctx.roundRect(-11, -8, 10, 14, 3); ctx.fill();
+  ctx.strokeStyle = '#0d47a1'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(-6, -6); ctx.lineTo(-2, 2); ctx.stroke();
+  ctx.fillStyle = '#42a5f5'; ctx.fillRect(-10, 0, 8, 4);
+  ctx.restore();
+  // Ноги
+  ctx.save();
+  ctx.translate(-3, 6); ctx.rotate(-legSwing * 0.15);
+  ctx.fillStyle = '#37474f'; ctx.fillRect(-2, 0, 4, 8);
+  ctx.fillStyle = '#212121'; ctx.fillRect(-3, 7, 5, 3);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(3, 6); ctx.rotate(legSwing * 0.15);
+  ctx.fillStyle = '#37474f'; ctx.fillRect(-2, 0, 4, 8);
+  ctx.fillStyle = '#212121'; ctx.fillRect(-2, 7, 5, 3);
+  ctx.restore();
+  // Тело
+  ctx.fillStyle = '#ff7043';
+  ctx.beginPath(); ctx.roundRect(-7, -6, 14, 14, 4); ctx.fill();
+  ctx.strokeStyle = '#bf360c'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(0, 7); ctx.stroke();
+  // Руки
+  ctx.save();
+  ctx.translate(-8, 0); ctx.rotate(armSwing * 0.25);
+  ctx.fillStyle = '#ffccbc'; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(8, 0); ctx.rotate(-armSwing * 0.25);
+  ctx.fillStyle = '#ffccbc'; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // Голова
+  ctx.fillStyle = '#ffccbc'; ctx.beginPath(); ctx.arc(0, -12, 7, 0, Math.PI * 2); ctx.fill();
+  // Волосы
+  ctx.fillStyle = '#5d4037';
+  ctx.beginPath(); ctx.arc(0, -14, 7, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.fillRect(-7, -14, 14, 3);
+  // Глаза
+  ctx.fillStyle = '#212121';
+  ctx.beginPath();
+  ctx.arc(-2.5, -12, 1.1, 0, Math.PI * 2);
+  ctx.arc( 2.5, -12, 1.1, 0, Math.PI * 2);
+  ctx.fill();
+  // Улыбка
+  ctx.strokeStyle = '#212121'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(0, -10, 2.5, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  // Румянец
+  ctx.fillStyle = 'rgba(255,100,100,0.35)';
+  ctx.beginPath();
+  ctx.arc(-4.5, -10, 1.4, 0, Math.PI * 2);
+  ctx.arc( 4.5, -10, 1.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// ============================================================
+//  МАШИНА
+// ============================================================
+function drawCar(o) {
+  const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+  let angle = 0;
+  if (Math.abs(o.vx) > Math.abs(o.vy)) angle = o.vx > 0 ? 0 : Math.PI;
+  else angle = o.vy > 0 ? Math.PI / 2 : -Math.PI / 2;
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(angle);
+  const w = o.w, h = o.h;
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.roundRect(-w/2 + 3, -h/2 + 4, w, h, 8); ctx.fill();
+  ctx.fillStyle = o.color;
+  ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, 8); ctx.fill();
+  ctx.fillStyle = 'rgba(180,220,255,0.85)';
+  ctx.beginPath(); ctx.roundRect(w/2 - 22, -h/2 + 6, 16, h - 12, 4); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(-w/2 + 6, -h/2 + 6, 14, h - 12, 4); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.beginPath(); ctx.roundRect(-w/2 + 26, -h/2 + 8, w - 52, h - 16, 3); ctx.fill();
+  ctx.fillStyle = '#fff59d';
+  ctx.beginPath();
+  ctx.arc(w/2 - 4, -h/2 + 10, 3, 0, Math.PI * 2);
+  ctx.arc(w/2 - 4,  h/2 - 10, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ef5350';
+  ctx.beginPath();
+  ctx.arc(-w/2 + 4, -h/2 + 10, 2.5, 0, Math.PI * 2);
+  ctx.arc(-w/2 + 4,  h/2 - 10, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// ============================================================
+//  СОБАКА
+// ============================================================
+function drawDog(o) {
+  const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+  const dir = o.vx >= 0 ? 1 : -1;
+  ctx.save();
+  ctx.translate(cx, cy); ctx.scale(dir, 1);
+  const w = o.w, h = o.h;
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.ellipse(0, h/2 - 4, w/2 - 2, 4, 0, 0, Math.PI * 2); ctx.fill();
+  const wag = Math.sin(Date.now() / 150) * 0.3;
+  ctx.save();
+  ctx.translate(-w/2 + 4, 0); ctx.rotate(wag);
+  ctx.strokeStyle = o.color; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-8, -4, -10, -8); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = o.color;
+  ctx.beginPath(); ctx.ellipse(0, 0, w/2 - 4, h/2 - 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(-w/2 + 4, h/2 - 10, 5, 8);
+  ctx.fillRect( w/2 - 9, h/2 - 10, 5, 8);
+  ctx.beginPath(); ctx.arc(w/2 - 6, -h/4, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3e2723';
+  ctx.beginPath(); ctx.arc(w/2 - 2, -h/4 + 1, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = o.color;
+  ctx.beginPath(); ctx.ellipse(w/2 - 8, -h/4 - 6, 3, 5, -0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(w/2 - 7, -h/4 - 1, 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// ============================================================
+//  ПТИЦА
+// ============================================================
+function drawBird(o) {
+  const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+  const dir = o.vx >= 0 ? 1 : -1;
+  const flap = Math.sin(Date.now() / 80) * 0.6;
+  ctx.save();
+  ctx.translate(cx, cy); ctx.scale(dir, 1);
+  const w = o.w, h = o.h;
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath(); ctx.ellipse(4, h/2 + 6, w/2 - 2, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save();
+  ctx.translate(-2, -2); ctx.rotate(-flap);
+  ctx.fillStyle = o.color;
+  ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.quadraticCurveTo(-w/2 - 4, -h/2 - 2, -w/2 - 2, 2);
+  ctx.quadraticCurveTo(-w/2, h/3, 0, 0); ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-2, 2); ctx.rotate(flap);
+  ctx.fillStyle = o.color;
+  ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.quadraticCurveTo(-w/2 - 4, h/2 + 2, -w/2 - 2, -2);
+  ctx.quadraticCurveTo(-w/2, -h/3, 0, 0); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = o.color;
+  ctx.beginPath(); ctx.ellipse(0, 0, w/2 - 3, h/4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(w/2 - 4, 0, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffb300';
+  ctx.beginPath(); ctx.moveTo(w/2, 0); ctx.lineTo(w/2 + 4, -1.5); ctx.lineTo(w/2 + 4, 1.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(w/2 - 3, -1, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// ============================================================
+//  СТРЕЛКА-КОМПАС
+// ============================================================
+function drawCompassArrow(px, py, targetX, targetY) {
+  const tx = targetX + shop.w / 2;
+  const ty = targetY + shop.h / 2;
+  const cx = px + player.size / 2;
+  const cy = py + player.size / 2;
+  const angle = Math.atan2(ty - cy, tx - cx);
+  const dist = 35; 
+
+  ctx.save();
+  ctx.translate(cx + Math.cos(angle) * dist, cy + Math.sin(angle) * dist);
+  ctx.rotate(angle);
+
+  const bounce = Math.sin(Date.now() / 200) * 3;
+  ctx.translate(bounce, 0);
+
+  ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.lineWidth = 1.5;
+
+  ctx.beginPath();
+  ctx.moveTo(8, 0);
+  ctx.lineTo(-6, -7);
+  ctx.lineTo(-3, 0);
+  ctx.lineTo(-6, 7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ============================================================
+//  ЦИКЛ
+// ============================================================
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
